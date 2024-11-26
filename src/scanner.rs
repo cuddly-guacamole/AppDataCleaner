@@ -3,15 +3,15 @@ use std::fs::{self};
 use std::sync::{mpsc::Sender, Arc, Mutex};
 use std::thread;
 
-pub fn scan_appdata(target: &str, selected_target: &str, tx: Sender<(String, u64)>) {
+pub fn scan_appdata(target: &str, selected_target: &str, tx: Sender<(String, u64)>) -> Result<(), String> {
     let appdata_dir = match dirs::data_dir() {
         Some(path) => match selected_target {
             "Local" => path.parent().unwrap().join("Local"),
             "Roaming" => path,
             "LocalLow" => path.parent().unwrap().join("LocalLow"),
-            _ => return, // 如果路径不匹配，返回
+            _ => return Err("不支持的目标文件夹".to_string()), // 如果路径不匹配，返回错误
         },
-        None => return,
+        None => return Err("无法找到 AppData 目录".to_string()),
     };
 
     println!("开始扫描文件夹: {}", target);
@@ -55,6 +55,9 @@ pub fn scan_appdata(target: &str, selected_target: &str, tx: Sender<(String, u64
                 }
             }
         });
+        Ok(())  // 返回成功
+    } else {
+        Err(format!("目录不存在: {}", appdata_dir.display()))
     }
 }
 
