@@ -3,11 +3,13 @@ use crate::confirmation;
 use crate::delete;
 use crate::scanner;
 use crate::utils;
-use eframe::egui::{self, Grid, ScrollArea};
-use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::mpsc::Sender;
+use dirs_next as dirs;
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
+use eframe::egui::{self, Grid, ScrollArea};
 use dirs_next as dirs;
 
 #[derive(Clone)]  // 添加 Clone trait 以支持克隆
@@ -57,16 +59,20 @@ impl AppDataCleaner {
 
     // 添加 start_scan 函数作为 AppDataCleaner 结构体的一部分
     fn start_scan(&mut self) {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::channel(); // 创建通道
 
-        // 将 `self` 包装在 `Arc<Mutex<Self>>` 中，允许线程共享
-        let appdata_cleaner: Arc<Mutex<AppDataCleaner>> = Arc::new(Mutex::new(self.clone()));
+        // 将 `tx` 和 `rx` 包装在 Arc<Mutex> 中，使其在多个线程中安全共享
+        let tx = Arc::new(Mutex::new(tx));
+        let rx = Arc::new(Mutex::new(rx));
 
-        std::thread::spawn({
-            let appdata_cleaner = Arc::clone(&appdata_cleaner); // 克隆 `Arc`，允许线程访问
+        // 创建线程进行扫描
+        thread::spawn({
+            let appdata_cleaner = Arc::clone(&self); // 克隆结构体，传入线程
+            let tx = Arc::clone(&tx); // 克隆发送者
+            let rx = Arc::clone(&rx); // 克隆接收者
             move || {
-                let appdata_cleaner = appdata_cleaner.lock().unwrap(); // 获取锁
                 scanner::scan_appdata(&appdata_cleaner.selected_target, &appdata_cleaner.selected_target, tx);
+                // 可以在此处增加接收数据的逻辑，例如通过 rx.lock().unwrap().recv() 来接收数据
             }
         });
     }
