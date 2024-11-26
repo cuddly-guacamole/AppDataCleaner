@@ -111,7 +111,12 @@ impl eframe::App for AppDataCleaner {
                     ui.close_menu();
                 }
             });
+            // 添加“立即扫描”按钮
+            if ui.button("立即扫描").clicked() {
+                self.start_scan(); // 直接启动扫描
+            }
         });
+
 
         // 当前目标标签
         egui::CentralPanel::default().show(ctx, |ui| {
