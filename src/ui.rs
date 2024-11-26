@@ -62,14 +62,17 @@ impl AppDataCleaner {
         let rx = Arc::new(Mutex::new(rx));
 
         // 创建线程进行扫描
+        let appdata_cleaner = Arc::new(Mutex::new(self.clone())); // 克隆 AppDataCleaner 结构体实例
         thread::spawn({
-            let appdata_cleaner = Arc::clone(&self.folder_data); // 使用 Arc<Mutex<AppDataCleaner>> 
+            let appdata_cleaner = Arc::clone(&appdata_cleaner); // 克隆 Arc
             let tx = Arc::clone(&tx); // 克隆发送者
             let rx = Arc::clone(&rx); // 克隆接收者
             move || {
-                // 解锁并获取数据
-                let appdata_cleaner = appdata_cleaner.lock().unwrap(); // 获取锁
-                scanner::scan_appdata(&appdata_cleaner.lock().unwrap().selected_target, &appdata_cleaner.lock().unwrap().selected_target, tx.lock().unwrap().clone());
+                let appdata_cleaner = appdata_cleaner.lock().unwrap(); // 获取锁，获取 AppDataCleaner 实例
+                let tx = tx.lock().unwrap(); // 获取 tx 的锁，得到 Sender 类型
+
+                // 传递解锁后的 Sender
+                scanner::scan_appdata(&appdata_cleaner.selected_target, &appdata_cleaner.selected_target, tx);
             }
         });
     }
