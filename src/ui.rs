@@ -4,13 +4,20 @@ use crate::delete;
 use crate::scanner;
 use crate::utils;
 use eframe::egui::{self, Grid, ScrollArea};
+use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
+use std::sync::mpsc;
+use std::sync::mpsc::Sender;
+use dirs_next as dirs;
 
+#[derive(Clone)]  // 添加 Clone trait 以支持克隆
 pub struct AppDataCleaner {
     is_scanning: bool,
     current_folder: Option<String>,
-    folder_data: Vec<(String, u64)>,
+    folder_data: Arc<Mutex<Vec<(String, u64)>>>, // 使用 Arc<Mutex> 包装数据
     show_about_window: bool,                // 确保字段存在
     confirm_delete: Option<(String, bool)>, // 保存要确认删除的文件夹状态
+    selected_target: String,                // 当前选择的目标文件夹
 }
 
 impl Default for AppDataCleaner {
@@ -18,9 +25,10 @@ impl Default for AppDataCleaner {
         Self {
             is_scanning: false,
             current_folder: None,
-            folder_data: vec![],
+            folder_data: Arc::new(Mutex::new(vec![])), // 初始化
             show_about_window: false, // 默认值
             confirm_delete: None,     // 初始化为 None
+            selected_target: "Local".to_string(), // 默认扫描 Local 文件夹
         }
     }
 }
@@ -46,6 +54,22 @@ impl AppDataCleaner {
 
         ctx.set_fonts(fonts);
     }
+
+    // 添加 start_scan 函数作为 AppDataCleaner 结构体的一部分
+    fn start_scan(&mut self) {
+        let (tx, rx) = mpsc::channel();
+
+        // 将 `self` 包装在 `Arc<Mutex<Self>>` 中，允许线程共享
+        let appdata_cleaner: Arc<Mutex<AppDataCleaner>> = Arc::new(Mutex::new(self.clone()));
+
+        std::thread::spawn({
+            let appdata_cleaner = Arc::clone(&appdata_cleaner); // 克隆 `Arc`，允许线程访问
+            move || {
+                let appdata_cleaner = appdata_cleaner.lock().unwrap(); // 获取锁
+                scanner::scan_appdata(&appdata_cleaner.selected_target, &appdata_cleaner.selected_target, tx);
+            }
+        });
+    }
 }
 
 impl eframe::App for AppDataCleaner {
@@ -65,67 +89,36 @@ impl eframe::App for AppDataCleaner {
             }
         }
 
-        // 顶部菜单
+        // 顶部菜单栏
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
-            ui.menu_button("菜单", |ui| {
-                if ui.button("关于").clicked() {
-                    self.show_about_window = true; // 打开关于窗口
+            if ui.button("关于").clicked() {
+                self.show_about_window = true; // 打开关于窗口
+            }
+            ui.menu_button("扫描文件夹", |ui| {
+                if ui.button("Local").clicked() {
+                    self.selected_target = "Local".to_string();
+                    self.start_scan(); // 切换文件夹后开始扫描
+                    ui.close_menu();
+                }
+                if ui.button("Roaming").clicked() {
+                    self.selected_target = "Roaming".to_string();
+                    self.start_scan(); // 切换文件夹后开始扫描
+                    ui.close_menu();
+                }
+                if ui.button("LocalLow").clicked() {
+                    self.selected_target = "LocalLow".to_string();
+                    self.start_scan(); // 切换文件夹后开始扫描
                     ui.close_menu();
                 }
             });
         });
 
+        // 当前目标标签
         egui::CentralPanel::default().show(ctx, |ui| {
-            if ui.button("立即扫描").clicked() && !self.is_scanning {
-                self.is_scanning = true;
-                self.folder_data.clear();
-
-                let (tx, rx) = std::sync::mpsc::channel();
-                std::thread::spawn(move || scanner::scan_appdata(tx));
-
-                while let Ok((folder, size)) = rx.recv() {
-                    self.folder_data.push((folder, size));
-                }
-
-                self.is_scanning = false;
-                self.current_folder = None;
-            }
-
-            if self.is_scanning {
-                ui.label("扫描中...");
-            }
-
-            ScrollArea::vertical().show(ui, |ui| {
-                Grid::new("folders_table").striped(true).show(ui, |ui| {
-                    ui.label("文件夹");
-                    ui.label("大小");
-                    ui.label("使用软件");
-                    ui.label("操作");
-                    ui.end_row();
-
-                    for (folder, size) in &self.folder_data {
-                        ui.label(folder);
-                        ui.label(utils::format_size(*size));
-                        ui.label("未知");
-
-                        if ui.button("彻底删除").clicked() {
-                            self.confirm_delete = Some((folder.clone(), false));
-                            let folder_name = folder.clone();
-                            let full_path = format!("{}/{}", utils::get_appdata_dir(), folder_name);
-                            if let Err(err) = delete::delete_folder(&full_path) {
-                                eprintln!("Error: {}", err);
-                            }
-                        }
-                        if ui.button("移动").clicked() {
-                            // 移动逻辑
-                        }
-                        ui.end_row();
-                    }
-                });
-            });
+            ui.label(format!("当前目标: {}", self.selected_target));
         });
 
-        // 关于窗口
+        // 显示关于窗口
         if self.show_about_window {
             about::show_about_window(ctx, &mut self.show_about_window);
         }
