@@ -72,7 +72,7 @@ impl AppDataCleaner {
                 let tx = tx.lock().unwrap(); // 获取 tx 的锁，得到 Sender 类型
 
                 // 传递解锁后的 Sender
-                scanner::scan_appdata(&appdata_cleaner.selected_target, &appdata_cleaner.selected_target, tx);
+                scanner::scan_appdata(&appdata_cleaner.selected_target, &appdata_cleaner.selected_target, tx.clone());
             }
         });
     }
