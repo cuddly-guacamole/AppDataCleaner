@@ -72,7 +72,13 @@ impl AppDataCleaner {
                 let tx = tx.lock().unwrap(); // 获取 tx 的锁，得到 Sender 类型
 
                 // 传递解锁后的 Sender
-                scanner::scan_appdata(&appdata_cleaner.selected_target, &appdata_cleaner.selected_target, tx.clone());
+                if let Err(err) = scanner::scan_appdata(
+                    &appdata_cleaner.selected_target, 
+                    &appdata_cleaner.selected_target, 
+                    tx.clone()  // 确保使用 clone，保证 Sender 的有效性
+                ) {
+                    eprintln!("发送数据失败: {}", err);
+                }
             }
         });
     }
