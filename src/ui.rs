@@ -6,6 +6,8 @@ use crate::utils;
 use crate::logger; // 导入 logger 模块
 use eframe::egui::{self, Grid, ScrollArea};
 use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
+use std::thread;
 
 pub struct AppDataCleaner { // 定义数据类型
     is_scanning: bool,
@@ -19,6 +21,7 @@ pub struct AppDataCleaner { // 定义数据类型
     is_logging_enabled: bool,  // 控制日志是否启用
     //current_folder_type: String, // 新增字段
     previous_logging_state: bool, // 记录上一次日志启用状态
+    parent_folder_size: Option<u64>, // 用于保存父文件夹的大小
 }
 
 impl Default for AppDataCleaner { // 定义变量默认值
@@ -35,6 +38,7 @@ impl Default for AppDataCleaner { // 定义变量默认值
             rx: Some(rx),
             is_logging_enabled: false,  // 默认禁用日志
             previous_logging_state: false, // 初始时假定日志系统未启用
+            parent_folder_size: None, // 初始化为 None
         }
     }
 }
@@ -60,6 +64,48 @@ impl AppDataCleaner {
 
         ctx.set_fonts(fonts);
     }
+
+    fn switch_folder(&mut self, folder: &str) {
+        self.selected_appdata_folder = folder.to_string();
+        self.folder_data.clear();
+        self.parent_folder_size = None; // 清空上次计算的大小
+
+        let folder_path = utils::get_appdata_dir(folder).unwrap();
+        let (tx, rx) = mpsc::channel();
+        self.rx = Some(rx);
+
+        thread::spawn(move || {
+            let folder_name = folder_path.to_str().unwrap_or_default().to_string(); // 获取文件夹名称
+            let size = utils::calculate_folder_size(&folder_path);
+            if let Ok(tx) = tx.send((folder_name, size)) {
+                // 发送成功
+            }
+        });
+    }
+
+    //fn scan_folder(&mut self, folder: &str) {
+    //    self.is_scanning = true;
+    //    self.folder_data.clear();
+
+    //    let (tx, rx) = mpsc::channel();
+    //    self.rx = Some(rx);
+
+    //    let folder_path = utils::get_appdata_dir(folder).unwrap();
+
+    //    // 计算父文件夹大小并通过通道返回
+    //    thread::spawn(move || {
+    //        let parent_folder_size = utils::calculate_folder_size(&folder_path);
+    //        if let Ok(_) = tx.send(parent_folder_size) {
+    //            // 发送父文件夹大小
+    //        }
+
+    //        // 获取文件夹的大小
+    //        let size = utils::calculate_folder_size(&folder_path);
+    //        if let Ok(_) = tx.send(size) {
+    //            // 发送文件夹大小
+    //        }
+    //    });
+    //}
 }
 
 impl eframe::App for AppDataCleaner {
@@ -97,6 +143,13 @@ impl eframe::App for AppDataCleaner {
             }
         }
 
+        //if self.is_scanning {
+        //    // 监听扫描完成的数据
+        //    if let Ok((folder, size)) = self.rx.as_ref().unwrap().try_recv() {
+        //        self.folder_data.push((folder, size));
+        //    }
+        //}
+
         // 顶部菜单
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             if ui.button("关于").clicked() {
@@ -112,18 +165,24 @@ impl eframe::App for AppDataCleaner {
                     self.selected_appdata_folder = "Roaming".to_string();
                     self.folder_data.clear(); // 清空扫描结果
                     self.is_scanning = false; // 重置扫描状态
+                    self.parent_folder_size = None; // 清空大小
+                    self.switch_folder("Roaming");
                     ui.close_menu();
                 }
                 if ui.button("Local").clicked() {
                     self.selected_appdata_folder = "Local".to_string();
                     self.folder_data.clear(); // 清空扫描结果
                     self.is_scanning = false; // 重置扫描状态
+                    self.parent_folder_size = None; // 清空大小
+                    self.switch_folder("Local");
                     ui.close_menu();
                 }
                 if ui.button("LocalLow").clicked() {
                     self.selected_appdata_folder = "LocalLow".to_string();
                     self.folder_data.clear(); // 清空扫描结果
                     self.is_scanning = false; // 重置扫描状态
+                    self.parent_folder_size = None; // 清空大小
+                    self.switch_folder("LocalLow");
                     ui.close_menu();
                 }
             });
