@@ -157,21 +157,35 @@ impl eframe::App for AppDataCleaner {
                 Grid::new("folders_table").striped(true).show(ui, |ui| {
                     ui.label("文件夹");
                     ui.label("大小");
+                    ui.label("占父文件夹比例");
                     ui.label("使用软件");
                     ui.label("操作");
                     ui.end_row();
-
-                    for (folder, size) in &self.folder_data {
-                        ui.label(folder);
-                        ui.label(utils::format_size(*size));
-                        ui.label("敬请期待");
-
-                        if ui.button("彻底删除").clicked() {
-                            self.confirm_delete = Some((folder.clone(), false));
+            
+                    if let Some(parent_dir) = utils::get_appdata_dir(&self.selected_appdata_folder) {
+                        let parent_size = utils::calculate_folder_size(&parent_dir);
+            
+                        for (folder, size) in &self.folder_data {
+                            ui.label(folder);
+                            ui.label(utils::format_size(*size));
+            
+                            // 计算百分比和绘制横状图
+                            let percentage = utils::calculate_percentage(*size, parent_size);
+                            let bar = utils::draw_percentage_bar(percentage, 20); // 横状图宽度为20
+                            ui.monospace(bar);
+            
+                            ui.label("敬请期待");
+            
+                            if ui.button("彻底删除").clicked() {
+                                self.confirm_delete = Some((folder.clone(), false));
+                            }
+                            if ui.button("移动").clicked() {
+                                // 移动逻辑
+                            }
+                            ui.end_row();
                         }
-                        if ui.button("移动").clicked() {
-                            // 移动逻辑
-                        }
+                    } else {
+                        ui.label("无法获取父文件夹大小");
                         ui.end_row();
                     }
                 });
