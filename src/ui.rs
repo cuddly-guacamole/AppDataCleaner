@@ -4,8 +4,10 @@ use crate::delete;
 use crate::scanner;
 use crate::utils;
 use crate::logger; // 导入 logger 模块
-use eframe::egui::{self, Grid, ScrollArea};
-use std::sync::mpsc::{Sender, Receiver};
+//use eframe::egui::{self, Grid, ScrollArea};
+//use std::sync::mpsc::{Sender, Receiver};
+use eframe::egui::{self, Grid, ScrollArea, ProgressBar};
+use std::sync::mpsc::{Sender, Receiver, TryRecvError};
 
 pub struct AppDataCleaner { // 定义数据类型
     is_scanning: bool,
@@ -19,6 +21,8 @@ pub struct AppDataCleaner { // 定义数据类型
     is_logging_enabled: bool,  // 控制日志是否启用
     //current_folder_type: String, // 新增字段
     previous_logging_state: bool, // 记录上一次日志启用状态
+    scan_progress: f32, // 进度跟踪
+    total_files: u64, // 文件总数
 }
 
 impl Default for AppDataCleaner { // 定义变量默认值
@@ -35,6 +39,8 @@ impl Default for AppDataCleaner { // 定义变量默认值
             rx: Some(rx),
             is_logging_enabled: false,  // 默认禁用日志
             previous_logging_state: false, // 初始时假定日志系统未启用
+            scan_progress: 0.0, //初始化进度
+            total_files: 0, // 初始化文件总数
         }
     }
 }
@@ -147,12 +153,40 @@ impl eframe::App for AppDataCleaner {
                 }
             }
 
+/*
             if self.is_scanning {
                 ui.label("扫描中...");
             } else {
                 ui.label("扫描完成");
             }
+*/
+            if self.is_scanning {
+                if let Some(rx) = &self.rx {
+                    loop {
+                        match rx.try_recv() {
+                            Ok((folder, size)) if folder.starts_with("progress_") => {
+                                self.scan_progress = folder[9..].parse().unwrap_or(0.0) / 100.0; // Extract progress from string
+                            }
+                            Ok((folder, size)) if folder == "scan_complete" => {
+                                self.is_scanning = false;
+                                break;
+                            }
+                            Ok((folder, size)) => {
+                                self.folder_data.push((folder, size));
+                            }
+                                Err(TryRecvError::Empty) => break,
+                                Err(TryRecvError::Disconnected) => {
+                                    self.is_scanning = false;
+                                    break;
+                            }
+                        }
+                }
 
+                    ui.add(ProgressBar::new(self.scan_progress).text(format!("扫描中... {:.2}%", self.scan_progress * 100.0)));
+                } else {
+                ui.label("扫描完成");
+                }
+            }
             ScrollArea::vertical().show(ui, |ui| {
                 Grid::new("folders_table").striped(true).show(ui, |ui| {
                     ui.label("文件夹");
