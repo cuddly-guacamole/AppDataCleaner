@@ -19,7 +19,7 @@
 </details>
 
 ## 🖥系统要求
-- Windows
+- Windows 8 及以上
 
 ## 使用方法
 
